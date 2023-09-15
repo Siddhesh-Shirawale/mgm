@@ -1,0 +1,7 @@
+{
+  "server": "ws://localhost:8080",
+  "connections": 100,
+  "concurrent": 10,
+  "duration": 60,
+  "message": "Hello, WebSocket Server!"
+}

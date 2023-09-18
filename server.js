@@ -2,6 +2,14 @@ const WebSocket = require("ws");
 const http = require("http");
 const cluster = require("cluster");
 const numCPUs = require("os").cpus().length;
+const express = require("express");
+const productsRouter = require("./app/routes/productRoutes.js");
+
+const app = express();
+
+app.use(express.json());
+
+app.use("/", productsRouter);
 
 if (cluster.isMaster) {
   // Fork worker processes for each CPU core

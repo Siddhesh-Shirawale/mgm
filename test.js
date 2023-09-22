@@ -1,47 +1,27 @@
-// const { WebSocket } = require("ws");
+const WebSocket = require("ws");
 
-// // Number of connections to create
-// const connections = 100;
-// // Number of concurrent connections
-// const concurrent = 10;
-// // Test duration in seconds
-// const duration = 60;
+// Define the WebSocket URL with the desired namespace
+const wsUrl = "ws://localhost:8080/message";
 
-// const messages = [
-//   "Hello, WebSocket Server!",
-//   "Test message 2",
-//   "Test message 3",
-// ]; // Add more messages as needed
+// Define the message object
+const message = {
+  action: "read",
+};
 
-// function createWebSocketConnection() {
-//   const ws = new WebSocket("ws://localhost:8000"); // Replace with your WebSocket server URL
-//   let messageIndex = 0;
+const ws = new WebSocket(wsUrl);
 
-//   ws.on("open", () => {
-//     console.log("Connected to WebSocket server");
-//   });
+ws.on("open", () => {
+  // Send the message as a JSON string
+  ws.send(JSON.stringify(message));
+});
 
-//   ws.on("message", (data) => {
-//     console.log(`Received: ${data}`);
-//   });
+ws.on("message", (data) => {
+  // Handle the response from the server
+  console.log("Received:", data);
+  // You can add additional handling logic here
+  ws.close();
+});
 
-//   ws.on("close", () => {
-//     console.log("Connection closed");
-//   });
-
-//   // Send messages at a regular interval
-//   const sendMessageInterval = setInterval(() => {
-//     if (messageIndex < messages.length) {
-//       ws.send(messages[messageIndex]);
-//       messageIndex++;
-//     } else {
-//       clearInterval(sendMessageInterval);
-//       ws.close();
-//     }
-//   }, 1000);
-// }
-
-// // Create multiple WebSocket connections
-// for (let i = 0; i < connections; i++) {
-//   createWebSocketConnection();
-// }
+ws.on("close", () => {
+  console.log("WebSocket connection closed");
+});

@@ -4,7 +4,8 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "nodemon server.js",
+    "start": "nodemon server.ts",
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -15,6 +16,12 @@
     "ws": "^8.2.3"
   },
   "devDependencies": {
-    "loadtest": "^5.2.0"
+    "@types/express": "^4.17.17",
+    "@types/express-serve-static-core": "^4.17.36",
+    "@types/node": "^20.6.3",
+    "@types/ws": "^8.5.5",
+    "loadtest": "^5.2.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
   }
 }

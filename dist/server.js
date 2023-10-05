@@ -22,6 +22,15 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -30,6 +39,7 @@ const ws_1 = __importDefault(require("ws"));
 const http = __importStar(require("http"));
 // import cluster from "cluster";
 const fs = __importStar(require("fs"));
+const amqplib_1 = __importDefault(require("amqplib"));
 const productDataFile = "products.json";
 // if (cluster.isPrimary) {
 //   // Fork worker processes for each CPU core
@@ -46,25 +56,51 @@ const server = http.createServer((req, res) => {
 });
 // const workerId = cluster.worker!.id; // Get the worker ID
 // const port = 8080 + workerId; // Calculate the port based on the worker ID
-const wss = new ws_1.default.Server({ server });
+const wss = new ws_1.default.Server({
+    server,
+    maxPayload: 1024 * 1024,
+    perMessageDeflate: false,
+    clientTracking: true,
+    // noServer: true,
+});
 wss.on("connection", (ws) => {
     // console.log(`WebSocket client connected on worker ${cluster.worker!.id}`);
-    ws.send("connected to ws");
-    ws.on("message", (message) => {
+    console.log("connected to server");
+    // ws.send("connected to ws");
+    ws.on("message", (message) => __awaiter(void 0, void 0, void 0, function* () {
         if (typeof message === "string") {
             // Ensure 'message' is a string
             // console.log(message);
-            handleMessage(ws, JSON.parse(message));
+            const connection = yield amqplib_1.default.connect("amqp://localhost");
+            const channel = yield connection.createChannel();
+            // Declare a queue
+            const queue = "websocket_queue";
+            yield channel.assertQueue(queue, { durable: false });
+            // Send the message to RabbitMQ
+            channel.sendToQueue(queue, Buffer.from(message));
+            // Close RabbitMQ connection
+            yield channel.close();
+            yield connection.close();
         }
         else if (message instanceof Buffer) {
             // Convert 'message' Buffer to a string
             // console.log(JSON.parse(message.toString()));
-            handleMessage(ws, JSON.parse(message.toString()));
+            // handleMessage(ws, JSON.parse(message.toString()));
+            const connection = yield amqplib_1.default.connect("amqp://localhost");
+            const channel = yield connection.createChannel();
+            // Declare a queue
+            const queue = "websocket_queue";
+            yield channel.assertQueue(queue, { durable: false });
+            // Send the message to RabbitMQ
+            channel.sendToQueue(queue, Buffer.from(message));
+            // Close RabbitMQ connection
+            yield channel.close();
+            yield connection.close();
         }
         else {
             // console.error("Received an unsupported message type:", typeof message);
         }
-    });
+    }));
     ws.on("close", () => {
         // console.log(
         //   `WebSocket client disconnected on worker ${cluster.worker!.id}`
@@ -74,6 +110,27 @@ wss.on("connection", (ws) => {
 server.listen(8080, () => {
     console.log(`WebSocket server is running on port 8080`);
 });
+function consumeQueue() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const connection = yield amqplib_1.default.connect("amqp://localhost");
+        const channel = yield connection.createChannel();
+        const queue = "websocket_queue";
+        yield channel.assertQueue(queue, { durable: false });
+        channel.consume(queue, (msg) => {
+            console.log("96", msg);
+            if (msg !== null) {
+                wss.clients.forEach((client) => {
+                    if (client.readyState === ws_1.default.OPEN) {
+                        // client.send(msg.content.toString());
+                        handleMessage(client, JSON.parse(msg.content.toString()));
+                    }
+                });
+                // Acknowledge the message
+                channel.ack(msg);
+            }
+        });
+    });
+}
 function handleMessage(ws, message) {
     switch (message.action) {
         case "create":
@@ -160,3 +217,4 @@ function broadcastProducts(sender, products) {
     });
 }
 // }
+consumeQueue();

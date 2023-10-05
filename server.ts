@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import * as http from "http";
 // import cluster from "cluster";
 import * as fs from "fs";
+import amqp from "amqplib";
 
 // const numCPUs = require("os").cpus().length;
 
@@ -33,22 +34,57 @@ const server = http.createServer(
 // const workerId = cluster.worker!.id; // Get the worker ID
 // const port = 8080 + workerId; // Calculate the port based on the worker ID
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({
+  server,
+  maxPayload: 1024 * 1024,
+  perMessageDeflate: false,
+  clientTracking: true,
+  // noServer: true,
+});
 
 wss.on("connection", (ws: WebSocket) => {
   // console.log(`WebSocket client connected on worker ${cluster.worker!.id}`);
-  ws.send("connected to ws");
+  console.log("connected to server");
 
-  ws.on("message", (message) => {
+  // ws.send("connected to ws");
+
+  ws.on("message", async (message) => {
     if (typeof message === "string") {
       // Ensure 'message' is a string
 
       // console.log(message);
-      handleMessage(ws, JSON.parse(message));
+
+      const connection = await amqp.connect("amqp://localhost");
+      const channel = await connection.createChannel();
+
+      // Declare a queue
+      const queue = "websocket_queue";
+      await channel.assertQueue(queue, { durable: false });
+
+      // Send the message to RabbitMQ
+      channel.sendToQueue(queue, Buffer.from(message));
+
+      // Close RabbitMQ connection
+      await channel.close();
+      await connection.close();
     } else if (message instanceof Buffer) {
       // Convert 'message' Buffer to a string
       // console.log(JSON.parse(message.toString()));
-      handleMessage(ws, JSON.parse(message.toString()));
+      // handleMessage(ws, JSON.parse(message.toString()));
+
+      const connection = await amqp.connect("amqp://localhost");
+      const channel = await connection.createChannel();
+
+      // Declare a queue
+      const queue = "websocket_queue";
+      await channel.assertQueue(queue, { durable: false });
+
+      // Send the message to RabbitMQ
+      channel.sendToQueue(queue, Buffer.from(message));
+
+      // Close RabbitMQ connection
+      await channel.close();
+      await connection.close();
     } else {
       // console.error("Received an unsupported message type:", typeof message);
     }
@@ -63,6 +99,29 @@ wss.on("connection", (ws: WebSocket) => {
 server.listen(8080, () => {
   console.log(`WebSocket server is running on port 8080`);
 });
+
+async function consumeQueue() {
+  const connection = await amqp.connect("amqp://localhost");
+  const channel = await connection.createChannel();
+
+  const queue = "websocket_queue";
+  await channel.assertQueue(queue, { durable: false });
+
+  channel.consume(queue, (msg) => {
+    // console.log("96", msg);
+    if (msg !== null) {
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          // client.send(msg.content.toString());
+          handleMessage(client, JSON.parse(msg.content.toString()));
+        }
+      });
+
+      // Acknowledge the message
+      channel.ack(msg);
+    }
+  });
+}
 
 function handleMessage(ws: WebSocket, message: any) {
   switch (message.action) {
@@ -170,3 +229,5 @@ function broadcastProducts(sender: WebSocket, products: Product[] | Product) {
   });
 }
 // }
+
+consumeQueue();

@@ -1,1 +1,10 @@
-[{ "action": "read" }]
+[
+  {
+    "connections": 100,
+    "forever": true,
+    "url": "ws://localhost:8080",
+    "setupClient": "./test.js",
+    "title": "Read Action Test",
+    "duration": 10
+  }
+]

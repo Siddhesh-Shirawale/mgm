@@ -2,7 +2,7 @@
   "products": [
     {
       "id": 1,
-      "title": "iPhone 9",
+      "title": "iPhone 98",
       "description": "An apple mobile which is nothing like apple",
       "price": 1000,
       "discountPercentage": 12.96,
@@ -21,7 +21,7 @@
     },
     {
       "id": 2,
-      "title": "iPhone X",
+      "title": "iPhone 65",
       "description": "SIM-Free, Model A19211 6.5-inch Super Retina HD display with OLED technology A12 Bionic chip with ...",
       "price": 899,
       "discountPercentage": 17.94,
@@ -52,7 +52,7 @@
     },
     {
       "id": 4,
-      "title": "OPPOF19",
+      "title": "OPPOF156",
       "description": "OPPO F19 is officially announced on April 2021.",
       "price": 280,
       "discountPercentage": 17.91,

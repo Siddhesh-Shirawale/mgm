@@ -4,8 +4,9 @@ import * as fs from "fs";
 import amqp from "amqplib";
 import cluster from "cluster";
 import os from "os";
-import sticky from "sticky-session";
+
 import util from "util";
+import cors from "cors";
 
 const readFileAsync = util.promisify(fs.readFile); // Promisify the fs.readFile method
 
@@ -38,8 +39,15 @@ if (cluster.isPrimary) {
   async function setupWebSocketServer() {
     const server = http.createServer(
       (req: http.IncomingMessage, res: http.ServerResponse) => {
-        res.writeHead(200, { "Content-Type": "text/plain" });
-        res.end("WebSocket server is running");
+        cors()(req, res, () => {
+          res.writeHead(200, {
+            "Content-Type": "text/plain",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
+            "Access-Control-Allow-Headers": "Content-Type",
+          });
+          res.end("WebSocket server is running");
+        });
       }
     );
     const wss = new WebSocket.Server({

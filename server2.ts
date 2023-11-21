@@ -4,12 +4,11 @@ import * as fs from "fs";
 import amqp from "amqplib";
 import cluster from "cluster";
 import os from "os";
-
 import util from "util";
 import cors from "cors";
-
+import sticky from "sticky-session";
 const readFileAsync = util.promisify(fs.readFile); // Promisify the fs.readFile method
-const PORT = 8080;
+const PORT = 8081;
 interface Product {
   id: number;
   title: string;
@@ -17,9 +16,20 @@ interface Product {
 
 const productDataFile = "products.json";
 
-let wssMap = new Map<number, WebSocket.Server>();
-
 // console.log("line 21", wssMap.size);
+const server = http.createServer(
+  (req: http.IncomingMessage, res: http.ServerResponse) => {
+    cors()(req, res, () => {
+      res.writeHead(200, {
+        "Content-Type": "text/plain",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
+        "Access-Control-Allow-Headers": "Content-Type",
+      });
+      res.end("WebSocket server is running");
+    });
+  }
+);
 
 if (cluster.isPrimary) {
   const numCPUs = os.cpus().length;
@@ -31,77 +41,80 @@ if (cluster.isPrimary) {
     console.log(`Worker ${worker.process.pid} died`);
   });
 } else {
-  async function createRabbitMQConnection() {
-    const connection = await amqp.connect("amqp://localhost");
-    // console.log("rabbit mq server started", connection);
-    return connection;
+  const wss = new WebSocket.Server({
+    server,
+    maxPayload: 1024 * 1024,
+    perMessageDeflate: false,
+    clientTracking: true,
+  });
+
+  wss.setMaxListeners(1000);
+  const rabbitMqUrl = "amqp://localhost";
+
+  const queue = "editqueue";
+  // console.log(channel);
+  // Connect to RabbitMQ
+  async function connectToRabbitMQ() {
+    try {
+      const connection = await amqp.connect(rabbitMqUrl);
+
+      return connection;
+    } catch (error) {
+      console.error("Error creating RabbitMQ channel:", error);
+      throw error;
+    }
   }
 
-  async function setupWebSocketServer() {
-    const server = http.createServer(
-      (req: http.IncomingMessage, res: http.ServerResponse) => {
-        cors()(req, res, () => {
-          res.writeHead(200, {
-            "Content-Type": "text/plain",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
-            "Access-Control-Allow-Headers": "Content-Type",
-          });
-          res.end("WebSocket server is running");
+  wss.on("connection", async (ws: any) => {
+    // console.log(ws);
+    // const heartbeatInterval = setInterval(() => {
+    //   // Send a ping message to the client
+    //   ws.ping();
+    // }, 30000);
+
+    connectToRabbitMQ()?.then(async (connection) => {
+      console.log("Connected to RabbitMQ");
+
+      let channel2 = await connection.createChannel();
+      await channel2.assertQueue(queue, { durable: true });
+      channel2.consume(queue, (message: any) => {
+        console.log(wss?.clients.size);
+
+        wss?.clients.forEach((client) => {
+          console.log("client present");
+
+          try {
+            let msg = JSON.parse(message?.content?.toString());
+
+            console.log(msg);
+
+            if (msg?.["action"] === "edit") {
+              handleMessage(client, JSON.parse(message.content.toString()));
+            } else {
+              console.log("consume queue action - ", msg?.["action"]);
+            }
+          } catch (error) {
+            console.log("error parsing in consume");
+          }
         });
-      }
-    );
-    const wss = new WebSocket.Server({
-      server,
-      maxPayload: 1024 * 1024,
-      perMessageDeflate: false,
-      clientTracking: true,
+      });
     });
 
-    wssMap.set(Number(cluster?.["worker"]?.["id"]), wss);
-    // console.log(`Client added to worker: ${cluster?.["worker"]?.["id"]}`);
+    let connection = await connectToRabbitMQ();
+    const channel = await connection.createChannel();
+    await channel.assertQueue(queue, { durable: true });
 
-    wss.on("connection", (ws: WebSocket) => {
-      console.log("Client connected to Worker: " + cluster?.worker?.id);
+    // When a WebSocket connection is established, forward messages to all workers
+    // console.log("Client connected to Worker: " + cluster?.worker?.id);
+    ws.on("message", async (message: any) => {
+      try {
+        if (message instanceof Buffer) {
+          let msg: any = JSON.parse(message?.toString());
 
-      ws.on("message", async (message) => {
-        console.log("Message received");
-        if (typeof message === "string") {
-          console.log("messageTypeString", message);
-          let action: any = JSON.parse(message);
-
-          console.log("61", message);
-          if (action?.["action"] === "read") {
-            const products = await readProductsAsync();
-            const productsToSend = products.slice(0, 5);
-            ws.send(JSON.stringify({ products: productsToSend }));
-          } else if (action?.["action"] === "detail") {
-            const products = await readProductsAsync();
-
-            const product = products.find(
-              (p: any) => p.id === Number(action?.["productId"])
-            );
-            ws.send(JSON.stringify({ product: product, action: "detail" }));
-          } else {
-            const connection = await createRabbitMQConnection();
-
-            const channel = await connection.createChannel();
-
-            const queue = "websocket_queue";
-            await channel.assertQueue(queue, { durable: false });
-
-            channel.sendToQueue(queue, Buffer.from(message));
-            consumeQueue();
-
-            // Close RabbitMQ connection
-            // await channel.close();
-            // await connection.close();
-          }
-        } else if (message instanceof Buffer) {
-          let msg: any = JSON.parse(message.toString());
-          console.log("102", JSON.parse(message.toString()));
+          console.log("main action", msg?.action);
           if (msg?.["action"] === "read") {
             const products = await readProductsAsync();
+
             const productsToSend = products.slice(0, 5);
             ws.send(JSON.stringify({ products: productsToSend }));
           } else if (msg?.["action"] === "detail") {
@@ -111,133 +124,113 @@ if (cluster.isPrimary) {
               (p: any) => p.id === Number(msg?.["productId"])
             );
             ws.send(JSON.stringify({ product: product, action: "detail" }));
+          } else if (msg?.["action"] === "edit") {
+            console.log(msg.action);
+            console.log(msg);
+
+            channel?.sendToQueue(queue, Buffer.from(message));
           } else {
-            const connection = await createRabbitMQConnection();
-            const channel = await connection.createChannel();
+            // console.log("else called");
+            // channel.publish(exchangeName, "", Buffer.from(message));
+            // console.log(JSON.parse(message.toString()));
+            if (channel) {
+              channel?.sendToQueue(queue, Buffer.from(message));
+            } else {
+              // const connection = await amqp.connect(rabbitMqUrl);
+              // channel = await connection.createChannel();
+              // await channel.assertQueue(queue);
+              // channel?.sendToQueue(queue, Buffer.from(message));
+              console.error("RabbitMQ channel is undefined.");
+            }
 
-            const queue = "websocket_queue";
-            await channel.assertQueue(queue, { durable: false });
-
-            channel.sendToQueue(queue, Buffer.from(message));
-            consumeQueue();
-            // await channel.close();
-            // await connection.close();
+            // setTimeout(() => {
+            //   channel.close();
+            //   // connection.close();
+            // }, 500);
+            // handleMessage(ws, JSON.parse(message?.toString()));
           }
-        } else {
-          console.error(
-            "Received an unsupported message type:",
-            typeof message
-          );
         }
-      });
-      ws.on("close", (code, reason) => {
-        console.log(
-          "Client disconnected with code:",
-          code,
-          "and reason:",
-          reason.toString()
-        );
-      });
-    });
-
-    await new Promise<void>((resolve) => {
-      server.listen(PORT, () => {
-        console.log(
-          `WebSocket server is running on port ${PORT} ${cluster.worker?.["id"]}`
-        );
-        resolve();
-      });
-    });
-  }
-
-  async function main() {
-    await setupWebSocketServer();
-
-    consumeResponseQueue();
-  }
-
-  main();
-
-  async function consumeQueue() {
-    // console.log("consume queue called");
-    const connection = await amqp.connect("amqp://localhost");
-    const channel = await connection.createChannel();
-
-    const queue = "websocket_queue";
-    await channel.assertQueue(queue, { durable: false });
-
-    console.log("consumQueue called");
-
-    channel.consume(queue, async (msg) => {
-      if (msg !== null) {
-        let processResult: any;
-
-        console.log("consumeQueueMSG = ", JSON.parse(msg.content.toString()));
-        console.log("consumeQueWSSMAPSIZE", wssMap.size);
-        console.log("consumeQueWSSMAP", wssMap);
-
-        wssMap.forEach((wss, workerId) => {
-          console.log("consumeQueue wss", wss);
-          console.log("consumeQueue worker id", workerId);
-          wss.clients.forEach((client) => {
-            console.log("consumeQueue", client);
-            if (client.readyState === WebSocket.OPEN && !processResult) {
-              console.log("client in ready state");
-              const message = JSON.parse(msg.content.toString());
-
-              processResult = handleMessage(client, message);
-            }
-          });
-        });
-        if (processResult) {
-          await sendToResponseQueue(processResult);
-        }
-        channel.ack(msg);
+      } catch (error) {
+        console.log(error);
+        console.error("Error parsing incoming message: Invalid message format");
       }
     });
-  }
 
-  async function consumeResponseQueue() {
-    const connection = await amqp.connect("amqp://localhost");
-    const channel = await connection.createChannel();
-    const queue = "response_queue";
-    await channel.assertQueue(queue, { durable: false });
-
-    channel.consume(queue, (msg) => {
-      if (msg !== null) {
-        const output = JSON.parse(msg.content.toString());
-
-        wssMap.forEach((wss, workerId) => {
-          console.log("consume response queue", wss);
-          console.log("consume response queue", workerId);
-          wss.clients.forEach((client) => {
-            console.log("consume response queue", client);
-            if (client.readyState === WebSocket.OPEN) {
-              console.log("client in ready state in consumeResponseQueue");
-              client.send(JSON.stringify(output));
-              console.log("output sent to client", output);
-            }
-          });
-        });
-        channel.ack(msg);
-      }
+    ws.on("close", () => {
+      // clearInterval(heartbeatInterval);
+      // console.log("client disconnected");
+      // reconnect();
     });
-  }
-  async function sendToResponseQueue(processResult: any) {
-    const connection = await amqp.connect("amqp://localhost");
-    const channel = await connection.createChannel();
-    const queue = "response_queue";
-    await channel.assertQueue(queue, { durable: false });
-    channel.sendToQueue(queue, Buffer.from(JSON.stringify(processResult)));
-    // await channel.close();
-    // await connection.close();
-  }
+
+    ws.on("disconnect", () => {
+      console.log(`Client disconnected: ${ws?.["id"]}`);
+      wss.clients.delete(ws?.["id"]); // Remove disconnected client from the list
+    });
+
+    // ws.on("pong", () => {
+    //   console.log("Received pong from client");
+    // });
+
+    // Listen for messages from RabbitMQ and send them to the WebSocket clients
+
+    // connectToRabbitMQ()?.then(async (connection) => {
+    //   console.log("Connected to RabbitMQ");
+
+    //   let channel2 = await connection.createChannel();
+    //   await channel2.assertQueue(queue, { durable: true });
+    //   channel2.consume(queue, (message: any) => {
+    //     // Handle RabbitMQ messages here and broadcast to connected clients
+    //     // console.log("consume queue called");
+    //     // console.log(message);
+
+    //     console.log(wss?.clients.size);
+    //     // console.log(wss);
+    //     wss?.clients.forEach((client) => {
+    //       console.log("client present");
+
+    //       try {
+    //         let msg = JSON.parse(message?.content?.toString());
+
+    //         console.log(msg);
+
+    //         if (msg?.["action"] === "edit") {
+    //           handleMessage(client, JSON.parse(message.content.toString()));
+    //         } else {
+    //           console.log("consume queue action - ", msg?.["action"]);
+    //         }
+    //       } catch (error) {
+    //         console.log("error parsing in consume");
+    //       }
+    //     });
+    //   });
+    // });
+  });
+
+  // connectToWebSocketServer();
+
+  server.listen(PORT, () => {
+    console.log(
+      `WebSocket server is running on port ${PORT} ${cluster.worker?.["id"]}`
+    );
+  });
+
+  // if (!sticky.listen(server, PORT)) {
+  //   // This is the master process
+  //   server.once("listening", () => {
+  //     `WebSocket server is running on port ${PORT} ${cluster.worker?.["id"]}`;
+  //   });
+  // } else {
+  //   // This is a worker process, so it will handle the WebSocket connections
+  //   server.on("upgrade", (request, socket, head) => {
+  //     wss.handleUpgrade(request, socket, head, (ws) => {
+  //       wss.emit("connection", ws, request);
+  //     });
+  //   });
+  // }
 
   function handleMessage(ws: WebSocket, message: any) {
-    console.log("Inside handleMessage, message:", message);
-    console.log("229", message);
-    console.log("203", message.action);
-    console.log("204", message.productId);
+    console.log("Handle message called");
+
     switch (message.action) {
       case "create":
         createProduct(message.product, (updatedProducts) => {
@@ -254,17 +247,22 @@ if (cluster.isPrimary) {
           ws.send(JSON.stringify({ products: productsToSend }));
         });
 
-        console.log("read called");
+        // console.log("read called");
         break;
       case "edit":
+        // console.log("handleMessage edit called");
         editProduct(message.product, (updatedProducts) => {
-          console.log("handle message - edit called");
-          console.log("line 257", updatedProducts);
           const existingProduct: Product | any = updatedProducts.find(
             (p) => p.id === message.product.id
           );
 
-          ws.send(JSON.stringify(existingProduct));
+          // ws.send(
+          //   JSON.stringify({
+          //     product: existingProduct,
+          //     action: message.action,
+          //     rowIndex: message.rowIndex,
+          //   })
+          // );
           broadcastProducts(existingProduct, message.action, message.rowIndex);
         });
         break;
@@ -296,15 +294,15 @@ if (cluster.isPrimary) {
   }
 
   function readProducts(callback: (products: Product[]) => void) {
+    // console.log("readProducts called");
     fs.readFile(productDataFile, "utf-8", (err, data) => {
-      console.log("Inside readProducts, data read:", data);
       if (err) {
         console.error("Error reading products file:", err);
         callback([]);
       } else {
         try {
           const products = JSON.parse(data);
-          console.log("Successfully parsed products");
+          // console.log("Successfully parsed products");
 
           callback(products?.["products"] || []);
         } catch (parseError) {
@@ -318,12 +316,12 @@ if (cluster.isPrimary) {
   async function readProductsAsync() {
     try {
       const data = await readFileAsync(productDataFile, "utf-8");
-      // console.log("Inside readProducts, data read:", data);
+      // console.log("readProductsAsync called");
       const products = JSON.parse(data);
-      // console.log("Successfully parsed products");
+
       return products?.["products"] || [];
     } catch (err) {
-      // console.error("Error reading or parsing products file:", err);
+      console.error("Error reading or parsing products file:", err);
       return [];
     }
   }
@@ -331,7 +329,7 @@ if (cluster.isPrimary) {
     editedProduct: Product,
     callback: (products: Product[]) => void
   ) {
-    console.log("editProduct function called");
+    // console.log("editProduct function called");
     readProducts((products) => {
       const existingProduct: any = products.find(
         (p) => p.id === editedProduct.id
@@ -351,7 +349,7 @@ if (cluster.isPrimary) {
   }
 
   function writeProducts(products: Product[], callback: () => void) {
-    console.log("Write product function called");
+    // console.log("Write product function called");
     let updatedProducts = { products: products };
     fs.writeFile(
       productDataFile,
@@ -372,22 +370,16 @@ if (cluster.isPrimary) {
     action: string,
     rowIndex: Number | null
   ) {
-    console.log("broadcast product function called");
-    wssMap.forEach((server, workerId) => {
-      console.log(workerId);
-
-      server.clients.forEach((client) => {
-        console.log(client);
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(
-            JSON.stringify({
-              product: products,
-              action: action,
-              rowIndex: rowIndex,
-            })
-          );
-        }
-      });
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(
+          JSON.stringify({
+            product: products,
+            action: action,
+            rowIndex: rowIndex,
+          })
+        );
+      }
     });
   }
 }

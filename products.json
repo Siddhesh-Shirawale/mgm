@@ -7,7 +7,7 @@
       "price": 1000,
       "discountPercentage": 12.96,
       "rating": 4.69,
-      "stock": 94,
+      "stock": 100,
       "brand": "Apple",
       "category": "smartphones",
       "thumbnail": "https://i.dummyjson.com/data/products/1/thumbnail.jpg",
@@ -21,7 +21,7 @@
     },
     {
       "id": 2,
-      "title": "iPhone 14",
+      "title": "iPhone 15 pro max",
       "description": "SIM-Free, Model A19211 6.5-inch Super Retina HD display with OLED technology A12 Bionic chip with ...",
       "price": 899,
       "discountPercentage": 17.94,
@@ -48,11 +48,13 @@
       "brand": "Samsung",
       "category": "smartphones",
       "thumbnail": "https://i.dummyjson.com/data/products/3/thumbnail.jpg",
-      "images": ["https://i.dummyjson.com/data/products/3/1.jpg"]
+      "images": [
+        "https://i.dummyjson.com/data/products/3/1.jpg"
+      ]
     },
     {
       "id": 4,
-      "title": "oppo f88",
+      "title": "oppo f16",
       "description": "OPPO F19 is officially announced on April 2021.",
       "price": 280,
       "discountPercentage": 17.91,
@@ -71,7 +73,7 @@
     },
     {
       "id": 5,
-      "title": "Huawei P90",
+      "title": "Huawei P9",
       "description": "Huawei's re-badged P30 Pro New Edition was officially unveiled yesterday in Germany and now the device has made its way to the UK.",
       "price": 499,
       "discountPercentage": 10.58,

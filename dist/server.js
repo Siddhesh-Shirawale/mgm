@@ -40,8 +40,6 @@ const http = __importStar(require("http"));
 const fs = __importStar(require("fs"));
 const amqplib_1 = __importDefault(require("amqplib"));
 const cluster_1 = __importDefault(require("cluster"));
-// import * as _cluster from "cluster";
-// const cluster = _cluster as unknown as _cluster.Cluster;
 const os_1 = __importDefault(require("os"));
 const util_1 = __importDefault(require("util"));
 const readFileAsync = util_1.default.promisify(fs.readFile);
@@ -64,184 +62,17 @@ function readProductsAsync() {
     });
 }
 if (cluster_1.default.isPrimary) {
-    let rabbitConnection;
-    amqplib_1.default
-        .connect("amqp://localhost")
-        .then((connection) => {
-        rabbitConnection = connection;
-        return connection.createChannel();
-    })
-        .then((channel) => {
-        const exchange = "cluster_exchange";
-        channel.assertExchange(exchange, "fanout", { durable: false });
-        const numCPUs = os_1.default.cpus().length;
-        for (let i = 0; i < numCPUs; i++) {
-            const worker = cluster_1.default.fork();
-            const queue = `worker_${worker.id}_queue`;
-            channel.assertQueue(queue, { durable: false });
-            channel.bindQueue(queue, exchange, "");
-        }
-    })
-        .catch((err) => {
-        console.error("Error connecting to RabbitMQ:", err);
-    });
+    const numCPUs = os_1.default.cpus().length;
+    for (let i = 0; i < numCPUs; i++) {
+        const worker = cluster_1.default.fork();
+    }
     cluster_1.default.on("exit", (worker, code, signal) => {
         console.log(`Worker ${worker.process.pid} died`);
-    });
-    // Function to broadcast a message to all workers
-    const broadcastEditRequest = (message) => {
-        rabbitConnection
-            .createChannel()
-            .then((channel) => {
-            const exchange = "cluster_exchange";
-            channel.assertExchange(exchange, "fanout", { durable: false });
-            channel.publish(exchange, "", Buffer.from(message));
-        })
-            .catch((err) => {
-            console.error("Error broadcasting edit request:", err);
-        });
-    };
-    // WebSocket server setup
-    const server = http.createServer();
-    const wss = new ws_1.default.Server({ server });
-    wss.on("connection", (ws) => {
-        // Handle WebSocket connections
-        ws.on("message", (message) => __awaiter(void 0, void 0, void 0, function* () {
-            // console.log(`Received WebSocket message: ${message}`);
-            // Handle your WebSocket messages here
-            // Example: Broadcast an edit request to all workers
-            const msg = JSON.parse(message);
-            if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "read") {
-                const products = yield readProductsAsync();
-                const productsToSend = products.slice(0, 5);
-                ws.send(JSON.stringify({ products: productsToSend }));
-            }
-            else if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "detail") {
-                // console.log("detail called");
-                const products = yield readProductsAsync();
-                const product = products.find((p) => p.id === Number(msg === null || msg === void 0 ? void 0 : msg["productId"]));
-                ws.send(JSON.stringify({ product: product, action: "detail" }));
-            }
-            else if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "edit") {
-                (() => __awaiter(void 0, void 0, void 0, function* () {
-                    const editRequestMessage = message;
-                    broadcastEditRequest(editRequestMessage);
-                }))();
-            }
-        }));
-    });
-    server.listen(8081, () => {
-        console.log("WebSocket server listening on port 8081");
     });
 }
 else {
     const server = http.createServer();
     const wss = new ws_1.default.Server({ server });
-    let rabbitConnection;
-    amqplib_1.default
-        .connect("amqp://localhost")
-        .then((connection) => {
-        rabbitConnection = connection;
-        return connection.createChannel();
-    })
-        .then((channel) => {
-        var _a;
-        const exchange = "cluster_exchange";
-        channel.assertExchange(exchange, "fanout", {
-            durable: false,
-        });
-        const numCPUs = os_1.default.cpus().length;
-        const queue = `worker_${(_a = cluster_1.default === null || cluster_1.default === void 0 ? void 0 : cluster_1.default.worker) === null || _a === void 0 ? void 0 : _a.id}_queue`;
-        channel.assertQueue(queue, { durable: false });
-        channel.bindQueue(queue, exchange, "");
-    })
-        .catch((err) => {
-        console.error("Error connecting to RabbitMQ:", err);
-    });
-    wss.on("connection", (ws) => {
-        var _a;
-        // Handle WebSocket connections in worker processes
-        console.log(`client connected on worker - ${(_a = cluster_1.default.worker) === null || _a === void 0 ? void 0 : _a["id"]}`);
-        ws.on("message", (message) => __awaiter(void 0, void 0, void 0, function* () {
-            // console.log(
-            //   `Worker ${cluster?.["worker"]?.["id"]} received WebSocket message: ${message}`
-            // );
-            // Handle your WebSocket messages here
-            const broadcastEditRequest = (message) => __awaiter(void 0, void 0, void 0, function* () {
-                let { connection, channel } = yield (0, rabbitmq_1.connect)();
-                connection
-                    .createChannel()
-                    .then((channel) => {
-                    const exchange = "cluster_exchange";
-                    channel.assertExchange(exchange, "fanout", { durable: false });
-                    channel.publish(exchange, "", Buffer.from(message));
-                })
-                    .catch((err) => {
-                    console.error("Error broadcasting edit request:", err);
-                });
-            });
-            (() => __awaiter(void 0, void 0, void 0, function* () {
-                amqplib_1.default
-                    .connect("amqp://localhost")
-                    .then((connection) => {
-                    return connection.createChannel();
-                })
-                    .then((channel) => {
-                    const exchange = "cluster_exchange";
-                    return channel
-                        .assertExchange(exchange, "fanout", { durable: false })
-                        .then(() => {
-                        return channel
-                            .assertQueue("", { exclusive: true })
-                            .then((q) => {
-                            channel.bindQueue(q.queue, exchange, "");
-                            channel.consume(q.queue, (msg) => {
-                                if (msg.content) {
-                                    const message = msg.content.toString();
-                                    // console.log(
-                                    //   `Worker ${cluster?.worker?.id} received broadcasted message: ${message}`
-                                    // );
-                                    // Handle the broadcasted message here
-                                    handleMessage(JSON.parse(msg.content.toString()));
-                                }
-                            }, { noAck: true });
-                        });
-                    });
-                })
-                    .catch((err) => {
-                    var _a;
-                    console.error(`Error setting up RabbitMQ connection in worker ${(_a = cluster_1.default === null || cluster_1.default === void 0 ? void 0 : cluster_1.default.worker) === null || _a === void 0 ? void 0 : _a.id}:`, err);
-                });
-            }))();
-            try {
-                if (message instanceof Buffer) {
-                    let msg = JSON.parse(message === null || message === void 0 ? void 0 : message.toString());
-                    // console.log("main action", msg?.action);
-                    if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "read") {
-                        const products = yield readProductsAsync();
-                        const productsToSend = products.slice(0, 5);
-                        ws.send(JSON.stringify({ products: productsToSend }));
-                    }
-                    else if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "detail") {
-                        console.log("detail called");
-                        const products = yield readProductsAsync();
-                        const product = products.find((p) => p.id === Number(msg === null || msg === void 0 ? void 0 : msg["productId"]));
-                        ws.send(JSON.stringify({ product: product, action: "detail" }));
-                    }
-                    else if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "edit") {
-                        (() => __awaiter(void 0, void 0, void 0, function* () {
-                            const editRequestMessage = message;
-                            broadcastEditRequest(editRequestMessage);
-                        }))();
-                    }
-                }
-            }
-            catch (error) {
-                console.log(error);
-                console.error("Error parsing incoming message: Invalid message format");
-            }
-        }));
-    });
     amqplib_1.default
         .connect("amqp://localhost")
         .then((connection) => {
@@ -256,11 +87,6 @@ else {
                 channel.bindQueue(q.queue, exchange, "");
                 channel.consume(q.queue, (msg) => {
                     if (msg === null || msg === void 0 ? void 0 : msg.content) {
-                        const message = msg === null || msg === void 0 ? void 0 : msg.content.toString();
-                        // console.log(
-                        //   `Worker ${cluster?.worker?.id} received broadcasted message: ${message}`
-                        // );
-                        // Handle the broadcasted message here
                         handleMessage(JSON.parse(msg === null || msg === void 0 ? void 0 : msg.content.toString()));
                     }
                 }, { noAck: true });
@@ -271,13 +97,66 @@ else {
         var _a;
         console.error(`Error setting up RabbitMQ connection in worker ${(_a = cluster_1.default === null || cluster_1.default === void 0 ? void 0 : cluster_1.default.worker) === null || _a === void 0 ? void 0 : _a.id}:`, err);
     });
-    server.listen(8081, "localhost", () => {
+    wss.on("connection", (ws) => {
+        ws.on("message", (message) => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                if (message instanceof Buffer) {
+                    let msg = JSON.parse(message === null || message === void 0 ? void 0 : message.toString());
+                    // console.log("main action", msg?.action);
+                    if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "read") {
+                        const products = yield readProductsAsync();
+                        const productsToSend = products.slice(0, 5);
+                        ws.send(JSON.stringify({ products: productsToSend }));
+                    }
+                    else if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "detail") {
+                        // console.log("detail called");
+                        const products = yield readProductsAsync();
+                        const product = products.find((p) => p.id === Number(msg === null || msg === void 0 ? void 0 : msg["productId"]));
+                        ws.send(JSON.stringify({ product: product, action: "detail" }));
+                    }
+                    else if ((msg === null || msg === void 0 ? void 0 : msg["action"]) === "edit") {
+                        (() => __awaiter(void 0, void 0, void 0, function* () {
+                            const broadcastEditRequest = (message) => __awaiter(void 0, void 0, void 0, function* () {
+                                let { connection, channel } = yield (0, rabbitmq_1.connect)();
+                                connection
+                                    .createChannel()
+                                    .then((channel) => {
+                                    const exchange = "cluster_exchange";
+                                    channel.assertExchange(exchange, "fanout", {
+                                        durable: false,
+                                    });
+                                    channel.publish(exchange, "", Buffer.from(message));
+                                })
+                                    .catch((err) => {
+                                    console.error("Error broadcasting edit request:", err);
+                                });
+                            });
+                            const editRequestMessage = message;
+                            broadcastEditRequest(editRequestMessage);
+                        }))();
+                    }
+                }
+            }
+            catch (error) {
+                console.log(error);
+                console.error("Error parsing incoming message: Invalid message format");
+            }
+        }));
+    });
+    // process.on("message", (message: any) => {
+    //   // Forward WebSocket connections to the appropriate worker process
+    //   wss.handleUpgrade(message.req, message.socket, message.head, (ws) => {
+    //     wss.emit("connection", ws, message.req);
+    //   });
+    // });
+    server.listen(PORT, "localhost", () => {
         var _a;
         const workerPort = server === null || server === void 0 ? void 0 : server.address();
         console.log(`Worker ${(_a = cluster_1.default === null || cluster_1.default === void 0 ? void 0 : cluster_1.default["worker"]) === null || _a === void 0 ? void 0 : _a["id"]} WebSocket server listening on port ${workerPort === null || workerPort === void 0 ? void 0 : workerPort.port}`);
     });
     function handleMessage(message) {
-        console.log("Handle message called");
+        var _a;
+        console.log(`${(_a = cluster_1.default === null || cluster_1.default === void 0 ? void 0 : cluster_1.default.worker) === null || _a === void 0 ? void 0 : _a.id} - handleMessage called`);
         switch (message.action) {
             case "edit":
                 editProduct(message.product, (updatedProducts) => {
@@ -338,7 +217,7 @@ else {
         });
     }
     function broadcastProducts(products, action, rowIndex) {
-        console.log(wss === null || wss === void 0 ? void 0 : wss.clients.size);
+        // console.log(`${cluster?.worker?.id} - ${wss?.clients.size}`);
         wss.clients.forEach((client) => {
             if (client.readyState === ws_1.default.OPEN) {
                 client.send(JSON.stringify({

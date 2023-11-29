@@ -2,7 +2,7 @@
   "products": [
     {
       "id": 1,
-      "title": "iPhone 15 pro",
+      "title": "iPhone 15 pero",
       "description": "An apple mobile which is nothing like apple",
       "price": 1000,
       "discountPercentage": 12.96,
@@ -21,7 +21,7 @@
     },
     {
       "id": 2,
-      "title": "iPhone 15 pro max",
+      "title": "iPhone 14 pro",
       "description": "SIM-Free, Model A19211 6.5-inch Super Retina HD display with OLED technology A12 Bionic chip with ...",
       "price": 899,
       "discountPercentage": 17.94,
@@ -39,7 +39,7 @@
     },
     {
       "id": 3,
-      "title": "samsung fe 23",
+      "title": "samsung fe 24",
       "description": "Samsung's new variant which goes beyond Galaxy to the Universe",
       "price": 1249,
       "discountPercentage": 15.46,
@@ -54,7 +54,7 @@
     },
     {
       "id": 4,
-      "title": "oppo f16",
+      "title": "oppo f24",
       "description": "OPPO F19 is officially announced on April 2021.",
       "price": 280,
       "discountPercentage": 17.91,
@@ -73,7 +73,7 @@
     },
     {
       "id": 5,
-      "title": "Huawei P9",
+      "title": "Huawei P11",
       "description": "Huawei's re-badged P30 Pro New Edition was officially unveiled yesterday in Germany and now the device has made its way to the UK.",
       "price": 499,
       "discountPercentage": 10.58,

@@ -71,7 +71,11 @@ if (cluster_1.default.isPrimary) {
     });
 }
 else {
-    const server = http.createServer();
+    const server = http.createServer((req, res) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    });
     const wss = new ws_1.default.Server({ server });
     amqplib_1.default
         .connect("amqp://localhost")
@@ -149,7 +153,7 @@ else {
     //     wss.emit("connection", ws, message.req);
     //   });
     // });
-    server.listen(PORT, "localhost", () => {
+    server.listen(PORT, () => {
         var _a;
         const workerPort = server === null || server === void 0 ? void 0 : server.address();
         console.log(`Worker ${(_a = cluster_1.default === null || cluster_1.default === void 0 ? void 0 : cluster_1.default["worker"]) === null || _a === void 0 ? void 0 : _a["id"]} WebSocket server listening on port ${workerPort === null || workerPort === void 0 ? void 0 : workerPort.port}`);

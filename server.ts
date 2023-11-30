@@ -3,6 +3,7 @@ import * as http from "http";
 import * as fs from "fs";
 import amqp from "amqplib";
 import cluster from "cluster";
+import cors from "cors";
 
 import os from "os";
 import util from "util";
@@ -42,7 +43,11 @@ if (cluster.isPrimary) {
     console.log(`Worker ${worker.process.pid} died`);
   });
 } else {
-  const server = http.createServer();
+  const server = http.createServer((req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  });
   const wss = new WebSocket.Server({ server });
 
   amqp
@@ -132,7 +137,7 @@ if (cluster.isPrimary) {
   //   });
   // });
 
-  server.listen(PORT, "localhost", () => {
+  server.listen(PORT, () => {
     const workerPort: any = server?.address();
     console.log(
       `Worker ${cluster?.["worker"]?.["id"]} WebSocket server listening on port ${workerPort?.port}`

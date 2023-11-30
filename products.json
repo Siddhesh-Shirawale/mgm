@@ -2,7 +2,7 @@
   "products": [
     {
       "id": 1,
-      "title": "iPhone 15 pero",
+      "title": "iPhone 15 pro max",
       "description": "An apple mobile which is nothing like apple",
       "price": 1000,
       "discountPercentage": 12.96,
@@ -21,7 +21,7 @@
     },
     {
       "id": 2,
-      "title": "iPhone 14 pro",
+      "title": "iPhone 14 pro max",
       "description": "SIM-Free, Model A19211 6.5-inch Super Retina HD display with OLED technology A12 Bionic chip with ...",
       "price": 899,
       "discountPercentage": 17.94,
@@ -39,7 +39,7 @@
     },
     {
       "id": 3,
-      "title": "samsung fe 24",
+      "title": "samsung fe 22",
       "description": "Samsung's new variant which goes beyond Galaxy to the Universe",
       "price": 1249,
       "discountPercentage": 15.46,

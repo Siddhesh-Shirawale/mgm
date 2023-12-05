@@ -1,7 +1,7 @@
 const autocannon = require("autocannon");
 
 const config = {
-  url: "ws://localhost:8080",
+  url: "ws://localhost:8081",
   connections: 1000,
   duration: 10,
   title: "WebSocket Load Test",

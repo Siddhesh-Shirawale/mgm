@@ -2,7 +2,7 @@
   {
     "connections": 100,
     "forever": true,
-    "url": "ws://localhost:8080",
+    "url": "ws://localhost:8081",
     "setupClient": "./test.js",
     "title": "Read Action Test",
     "duration": 10
